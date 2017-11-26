@@ -839,7 +839,10 @@ func doXCodeFramework(cmdline []string) {
 	env := build.Env()
 
 	// Build the iOS XCode framework
-	build.MustRun(goTool("get", "github.com/kinfoundation/mobile/cmd/gomobile"))
+  // Clone kinfoundation's golang mobile fork that includes 386 slice for binding ios framework
+	build.MustRun(goTool("get", "-d", "golang.org/x/mobile/cmd/gomobile"))
+	build.MustRunCommand("bash", "clone_kin_mobile.sh")
+	build.MustRun(goTool("get", "golang.org/x/mobile/cmd/gomobile"))
 	build.MustRun(gomobileTool("init"))
 	bind := gomobileTool("bind", "--target", "ios", "--tags", "ios", "-v", "github.com/ethereum/go-ethereum/mobile")
 
