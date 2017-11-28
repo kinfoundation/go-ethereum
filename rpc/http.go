@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"sync"
 	"time"
 
@@ -73,7 +74,12 @@ func DialHTTP(endpoint string) (*Client, error) {
 
 	initctx := context.Background()
 	return newClient(initctx, func(context.Context) (net.Conn, error) {
-		return &httpConn{client: new(http.Client), req: req, closed: make(chan struct{})}, nil
+		// add cookie support
+		cookieJar, _ := cookiejar.New(nil)
+		httpClient := &http.Client{
+			Jar: cookieJar,
+		}
+		return &httpConn{client: httpClient, req: req, closed: make(chan struct{})}, nil
 	})
 }
 
@@ -114,7 +120,12 @@ func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadClos
 	if err != nil {
 		return nil, err
 	}
+
 	req := hc.req.WithContext(ctx)
+
+	// because the http.Request object is reused, we need to clean the copied state.
+	req.Header.Del("Cookie")
+
 	req.Body = ioutil.NopCloser(bytes.NewReader(body))
 	req.ContentLength = int64(len(body))
 
