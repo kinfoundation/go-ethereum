@@ -40,7 +40,7 @@ var nullAddr, _ = net.ResolveTCPAddr("tcp", "127.0.0.1:0")
 
 type httpConn struct {
 	client    *http.Client
-	req       *http.Request
+	endpoint  string
 	closeOnce sync.Once
 	closed    chan struct{}
 }
@@ -65,13 +65,6 @@ func (hc *httpConn) Close() error {
 
 // DialHTTP creates a new RPC clients that connection to an RPC server over HTTP.
 func DialHTTP(endpoint string) (*Client, error) {
-	req, err := http.NewRequest("POST", endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
 	initctx := context.Background()
 	return newClient(initctx, func(context.Context) (net.Conn, error) {
 		// add cookie support
@@ -79,7 +72,7 @@ func DialHTTP(endpoint string) (*Client, error) {
 		httpClient := &http.Client{
 			Jar: cookieJar,
 		}
-		return &httpConn{client: httpClient, req: req, closed: make(chan struct{})}, nil
+		return &httpConn{client: httpClient, endpoint: endpoint, closed: make(chan struct{})}, nil
 	})
 }
 
@@ -116,15 +109,18 @@ func (c *Client) sendBatchHTTP(ctx context.Context, op *requestOp, msgs []*jsonr
 }
 
 func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadCloser, error) {
+	req, err := http.NewRequest("POST", hc.endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
-
-	req := hc.req.WithContext(ctx)
-
-	// because the http.Request object is reused, we need to clean the copied state.
-	req.Header.Del("Cookie")
 
 	req.Body = ioutil.NopCloser(bytes.NewReader(body))
 	req.ContentLength = int64(len(body))
